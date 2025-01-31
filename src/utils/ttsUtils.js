@@ -1,18 +1,14 @@
 // ttsUtils.js
 const API_KEY = process.env.REACT_APP_API_KEY;
-//const VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
-// Single shared audio context
 let sharedAudioContext = null;
+let isCurrentlyPlaying = false; // Add this flag to track playback state
 
-// Initialize audio context with iOS compatibility
 export const getAudioContext = () => {
   if (!sharedAudioContext) {
-    // Create new context with iOS-compatible options
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     sharedAudioContext = new AudioContext({
-      // iOS optimization options
       sampleRate: 44100,
       latencyHint: 'interactive'
     });
@@ -20,7 +16,6 @@ export const getAudioContext = () => {
   return sharedAudioContext;
 };
 
-// Ensure audio context is running
 const ensureAudioContextRunning = async () => {
   const context = getAudioContext();
   if (context.state === 'suspended') {
@@ -29,44 +24,52 @@ const ensureAudioContextRunning = async () => {
   return context;
 };
 
-// Function to play audio buffer with iOS compatibility
 const playAudioBuffer = async (buffer) => {
   try {
     const context = await ensureAudioContextRunning();
     
-    // Create and configure source
     const source = context.createBufferSource();
     source.buffer = buffer;
     
-    // Create gain node for volume control
     const gainNode = context.createGain();
-    gainNode.gain.value = 1.0; // Full volume
+    gainNode.gain.value = 1.0;
     
-    // Connect nodes
     source.connect(gainNode);
     gainNode.connect(context.destination);
     
-    // Start playback
     source.start(0);
     
     return new Promise((resolve, reject) => {
-      source.onended = resolve;
-      source.onerror = reject;
+      source.onended = () => {
+        isCurrentlyPlaying = false; // Reset flag when playback ends
+        resolve();
+      };
+      source.onerror = (error) => {
+        isCurrentlyPlaying = false; // Reset flag on error
+        reject(error);
+      };
     });
   } catch (error) {
+    isCurrentlyPlaying = false; // Reset flag on error
     console.error('Error playing audio:', error);
     throw error;
   }
 };
 
 export const playMilestoneAnnouncement = async (count) => {
+  // If already playing, skip this announcement
+  if (isCurrentlyPlaying) {
+    console.log('Skipping announcement - audio already playing');
+    return;
+  }
+
   if (!API_KEY) {
     console.error('ElevenLabs API key not found');
     return;
   }
 
   try {
-    // Ensure audio context is running before making API call
+    isCurrentlyPlaying = true; // Set flag before starting playback
     await ensureAudioContextRunning();
 
     const response = await fetch(
@@ -90,22 +93,20 @@ export const playMilestoneAnnouncement = async (count) => {
     );
 
     if (!response.ok) {
+      isCurrentlyPlaying = false; // Reset flag on error
       const errorText = await response.text();
       console.error('ElevenLabs API Error:', errorText);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // Get array buffer from response
     const arrayBuffer = await response.arrayBuffer();
-    
-    // Decode the audio data
     const context = getAudioContext();
     const audioBuffer = await context.decodeAudioData(arrayBuffer);
     
-    // Play the audio
     await playAudioBuffer(audioBuffer);
 
   } catch (error) {
+    isCurrentlyPlaying = false; // Reset flag on error
     console.error('Error playing milestone announcement:', error);
     throw error;
   }
