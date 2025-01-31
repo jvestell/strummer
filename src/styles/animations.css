@@ -1,0 +1,21 @@
+/* Counter Animations */
+@keyframes countChange {
+    0% {
+      transform: scale(1.2);
+      color: rgb(37, 99, 235); /* blue-600 */
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  
+  .animate-count {
+    animation: countChange 0.2s ease-out;
+  }
+  
+  /* Ensure numbers don't shift layout when changing */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* Add any future custom animations below */
