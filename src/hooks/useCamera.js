@@ -1,83 +1,62 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMotionDetection } from './useMotionDetection';
 
-export const useCamera = ({ isActive, onStrumDetected }) => {
-  const [hasPermission, setHasPermission] = useState(false);
-  const [error, setError] = useState(null);
+export const useCamera = ({ onStrumDetected, isActive }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
-
-  const { startDetection, stopDetection } = useMotionDetection({
+  const [hasPermission, setHasPermission] = useState(false);
+  const [error, setError] = useState(null);
+  const motionDetection = useMotionDetection({
     videoRef,
     canvasRef,
     onMotionDetected: onStrumDetected,
-    sensitivity: 35,
-    cooldownPeriod: 150
   });
 
-  // Clean up function to stop all tracks
-  const stopVideoStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  // Initialize camera when component mounts or isActive changes
+  // Initialize camera stream on mount
   useEffect(() => {
-    const startCamera = async () => {
-      // Clean up any existing stream first
-      stopVideoStream();
+    let mounted = true;
 
-      if (!isActive) {
-        setHasPermission(false);
-        return;
-      }
-
+    const initializeCamera = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 320 },
-            height: { ideal: 240 }
-          },
-          audio: false
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user' } 
         });
-
-        if (videoRef.current && isActive) {
+        
+        if (mounted) {
           streamRef.current = stream;
-          videoRef.current.srcObject = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
           setHasPermission(true);
           setError(null);
-        } else {
-          // If component was deactivated during getUserMedia call
-          stream.getTracks().forEach(track => track.stop());
         }
       } catch (err) {
-        setError('Camera permission denied');
-        setHasPermission(false);
+        if (mounted) {
+          setError('Camera access denied. Please check your permissions.');
+          setHasPermission(false);
+        }
       }
     };
 
-    startCamera();
+    initializeCamera();
 
-    // Cleanup function
     return () => {
-      stopVideoStream();
+      mounted = false;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [isActive]); // Now depends on isActive
+  }, []); // Empty dependency array - only run on mount
 
+  // Start/stop motion detection based on isActive prop
   useEffect(() => {
     if (hasPermission && isActive) {
-      startDetection();
+      motionDetection.startDetection();
     } else {
-      stopDetection();
+      motionDetection.stopDetection();
     }
-  }, [hasPermission, isActive, startDetection, stopDetection]);
+  }, [hasPermission, motionDetection, isActive]);
 
   return {
     videoRef,

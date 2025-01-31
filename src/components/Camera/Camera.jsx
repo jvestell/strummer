@@ -28,28 +28,32 @@ export const Camera = ({ isActive, onStrumDetected }) => {
           playsInline
           muted
           className={`object-cover w-full h-full transform ${
-            hasPermission ? 'opacity-100' : 'opacity-0'
+            isActive && hasPermission ? 'opacity-100' : 'opacity-0'
           }`}
         />
         
-        {/* Hidden canvas for motion detection */}
         <canvas
           ref={canvasRef}
           className="hidden"
         />
       </div>
 
-      {!hasPermission && (
+      {/* Status overlays */}
+      {!isActive ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+          <div className="text-white flex items-center">
+            <CameraIcon className="w-5 h-5 mr-2" />
+            <span>Camera inactive</span>
+          </div>
+        </div>
+      ) : !hasPermission ? (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
           <div className="text-white flex items-center">
             <CameraIcon className="w-5 h-5 mr-2 animate-pulse" />
             <span>Requesting camera access...</span>
           </div>
         </div>
-      )}
-
-      {/* Optional: Activity indicator when detection is active */}
-      {isActive && hasPermission && (
+      ) : (
         <div className="absolute top-2 right-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         </div>
