@@ -1,80 +1,88 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useMotionDetection } from './useMotionDetection';
 
-export const useCamera = (videoRef) => {
+export const useCamera = ({ isActive, onStrumDetected }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [error, setError] = useState(null);
-  const [stream, setStream] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+  const { startDetection, stopDetection } = useMotionDetection({
+    videoRef,
+    canvasRef,
+    onMotionDetected: onStrumDetected,
+    sensitivity: 35,
+    cooldownPeriod: 150
+  });
+
+  // Clean up function to stop all tracks
+  const stopVideoStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-  }, [stream, videoRef]);
+  };
 
-  const startCamera = useCallback(async () => {
-    try {
-      setError(null);
-      
-      // Check for Safari and HTTPS
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      const isHttps = window.location.protocol === 'https:';
-      
-      if (isSafari && !isHttps) {
-        throw new Error('Safari requires HTTPS to access the camera');
+  // Initialize camera when component mounts or isActive changes
+  useEffect(() => {
+    const startCamera = async () => {
+      // Clean up any existing stream first
+      stopVideoStream();
+
+      if (!isActive) {
+        setHasPermission(false);
+        return;
       }
 
-      const constraints = {
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        }
-      };
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        // Wait for video to be ready
-        await new Promise((resolve) => {
-          videoRef.current.onloadedmetadata = resolve;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          },
+          audio: false
         });
-        await videoRef.current.play();
-      }
 
-      setHasPermission(true);
-    } catch (err) {
-      console.error('Camera access error:', err);
-      
-      if (err.name === 'NotAllowedError') {
-        setError('Camera access denied. Please enable camera permissions.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No camera found. Please ensure your device has a camera.');
-      } else if (err.name === 'NotReadableError') {
-        setError('Camera is in use by another application.');
-      } else {
-        setError(`Camera error: ${err.message || 'Could not access camera'}`);
+        if (videoRef.current && isActive) {
+          streamRef.current = stream;
+          videoRef.current.srcObject = stream;
+          setHasPermission(true);
+          setError(null);
+        } else {
+          // If component was deactivated during getUserMedia call
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        setError('Camera permission denied');
+        setHasPermission(false);
       }
-      
-      setHasPermission(false);
-    }
-  }, [videoRef]);
+    };
 
-  const requestPermission = useCallback(() => {
     startCamera();
-  }, [startCamera]);
+
+    // Cleanup function
+    return () => {
+      stopVideoStream();
+    };
+  }, [isActive]); // Now depends on isActive
+
+  useEffect(() => {
+    if (hasPermission && isActive) {
+      startDetection();
+    } else {
+      stopDetection();
+    }
+  }, [hasPermission, isActive, startDetection, stopDetection]);
 
   return {
+    videoRef,
+    canvasRef,
     hasPermission,
-    requestPermission,
-    startCamera,
-    stopCamera,
     error
   };
 };
