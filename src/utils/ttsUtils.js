@@ -1,6 +1,7 @@
 // ttsUtils.js
 const API_KEY = process.env.REACT_APP_API_KEY;
-const VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+//const VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+const VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
 // Single shared audio context
 let sharedAudioContext = null;
@@ -78,7 +79,7 @@ export const playMilestoneAnnouncement = async (count) => {
           'xi-api-key': API_KEY
         },
         body: JSON.stringify({
-          text: `${count} strums!`,
+          text: `${count}!`,
           model_id: "eleven_monolingual_v1",
           voice_settings: {
             stability: 0.71,
