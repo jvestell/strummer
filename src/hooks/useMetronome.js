@@ -19,20 +19,31 @@ export const useMetronome = ({ bpm, isActive, enabled = true }) => {
     const oscillator = audioContextRef.current.createOscillator();
     const gainNode = audioContextRef.current.createGain();
 
-    oscillator.connect(gainNode);
+    // Create a filter for more wooden sound
+    const filter = audioContextRef.current.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 2400; // Emphasize wood-like frequencies
+    filter.Q.value = 1.5;
+
+    // Connect nodes: oscillator -> filter -> gain -> output
+    oscillator.connect(filter);
+    filter.connect(gainNode);
     gainNode.connect(audioContextRef.current.destination);
 
     // Set up sound properties
-    oscillator.frequency.setValueAtTime(880, audioContextRef.current.currentTime); // A5 note
-    gainNode.gain.setValueAtTime(0.1, audioContextRef.current.currentTime);
+    oscillator.type = "triangle"; // Use triangle wave for wooden character
+    oscillator.frequency.setValueAtTime(1800, audioContextRef.current.currentTime);
+    
+    // Shorter, sharper attack for click sound
+    gainNode.gain.setValueAtTime(0.3, audioContextRef.current.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(
       0.001,
-      audioContextRef.current.currentTime + 0.05
+      audioContextRef.current.currentTime + 0.03
     );
 
     // Play sound
     oscillator.start(audioContextRef.current.currentTime);
-    oscillator.stop(audioContextRef.current.currentTime + 0.05);
+    oscillator.stop(audioContextRef.current.currentTime + 0.03);
   }, [enabled]);
 
   // Start/stop metronome loop
