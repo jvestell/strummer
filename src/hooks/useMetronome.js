@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export const useMetronome = ({ bpm, isActive }) => {
+export const useMetronome = ({ bpm, isActive, enabled = true }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef(null);
   const intervalRef = useRef(null);
@@ -14,7 +14,7 @@ export const useMetronome = ({ bpm, isActive }) => {
 
   // Create and play a tick sound
   const playTick = useCallback(() => {
-    if (!audioContextRef.current) return;
+    if (!audioContextRef.current || !enabled) return;
 
     const oscillator = audioContextRef.current.createOscillator();
     const gainNode = audioContextRef.current.createGain();
@@ -33,20 +33,27 @@ export const useMetronome = ({ bpm, isActive }) => {
     // Play sound
     oscillator.start(audioContextRef.current.currentTime);
     oscillator.stop(audioContextRef.current.currentTime + 0.05);
-  }, []);
+  }, [enabled]);
 
   // Start/stop metronome loop
-  const updateMetronome = useCallback(() => {
+  useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
 
-    if (isPlaying && isActive) {
+    if (isActive && enabled) {
+      initAudioContext();
       const intervalTime = (60 / bpm) * 1000;
       intervalRef.current = setInterval(playTick, intervalTime);
       playTick(); // Play first tick immediately
     }
-  }, [bpm, isPlaying, isActive, playTick]);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [bpm, isActive, enabled, playTick, initAudioContext]);
 
   // Toggle sound on/off
   const toggleSound = useCallback(() => {
@@ -59,16 +66,6 @@ export const useMetronome = ({ bpm, isActive }) => {
     }
     setIsPlaying(prev => !prev);
   }, [isPlaying, initAudioContext]);
-
-  // Update metronome when BPM or playing state changes
-  useEffect(() => {
-    updateMetronome();
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [bpm, isPlaying, isActive, updateMetronome]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -83,7 +80,7 @@ export const useMetronome = ({ bpm, isActive }) => {
   }, []);
 
   return {
-    isPlaying,
+    isPlaying: isActive && enabled,
     toggleSound
   };
 };
