@@ -32,7 +32,7 @@ const App = () => {
       setStrumCount(prev => {
         const newCount = prev + 2;
         // Check if we've hit a milestone
-        if (newCount % 20 === 0 && soundEnabled) {
+        if (newCount % 100 === 0 && soundEnabled) {
           playMilestoneAnnouncement(newCount).catch(error => {
             console.error('Failed to play announcement:', error);
           });
