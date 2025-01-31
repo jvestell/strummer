@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Camera } from './components/Camera/Camera';
 import { Counter } from './components/Counter/Counter';
 import { Metronome } from './components/Metronome/Metronome';
 
@@ -7,7 +6,6 @@ const App = () => {
   const [strumCount, setStrumCount] = useState(0);
   const [bpm, setBpm] = useState(60);
   const [isActive, setIsActive] = useState(false);
-  const [lastBeatTime, setLastBeatTime] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Handle metronome beats and strum counting
@@ -17,25 +15,15 @@ const App = () => {
     const interval = (60 / bpm) * 1000; // Convert BPM to milliseconds
     const beatInterval = setInterval(() => {
       setStrumCount(prev => prev + 2); // Increment by 2 for up/down strums
-      setLastBeatTime(Date.now());
     }, interval);
 
     return () => clearInterval(beatInterval);
   }, [isActive, bpm]);
 
-  const handleStrumDetected = () => {
-    setStrumCount(prevCount => prevCount + 1);
-  };
-
-  const handleBpmChange = (newBpm) => {
-    setBpm(newBpm);
-  };
-
   const handleStartStop = () => {
     setIsActive(prev => !prev);
     if (!isActive) {
       setStrumCount(0); // Reset counter when starting
-      setLastBeatTime(Date.now());
     }
   };
 
@@ -70,19 +58,6 @@ const App = () => {
           </div>
           
           <Counter count={strumCount} />
-
-          <div className="mt-4 flex justify-center">
-            <button
-              onClick={toggleSound}
-              className={`text-sm px-3 py-1 rounded-md transition-colors ${
-                soundEnabled
-                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {soundEnabled ? '🔊 Sound On' : '🔈 Sound Off'}
-            </button>
-          </div>
         </div>
       </div>
     </div>
