@@ -1,105 +1,85 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { createROIMask, rgbToGrayscale } from '../utils/motionDetection';
 
-export const useMotionDetection = ({
-  videoRef,
-  canvasRef,
-  onMotionDetected,
-  sensitivity = 30,
-  cooldownPeriod = 150
-}) => {
-  const animationFrameRef = useRef(null);
+export const useMotionDetection = ({ onMotionDetected, sensitivity = 30, cooldownPeriod = 500 }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const previousFrameRef = useRef(null);
+  const roiMaskRef = useRef(null);
   const lastDetectionRef = useRef(0);
-  const previousImageDataRef = useRef(null);
 
-  const detectMotion = useCallback((prevData, currentData) => {
-    let diff = 0;
-    const length = prevData.length;
-    
-    // Compare every 4th pixel (RGBA values)
-    for (let i = 0; i < length; i += 4) {
-      const prevGray = (prevData[i] + prevData[i + 1] + prevData[i + 2]) / 3;
-      const currentGray = (currentData[i] + currentData[i + 1] + currentData[i + 2]) / 3;
-      diff += Math.abs(currentGray - prevGray);
-    }
-    
-    return diff / (length / 4); // Average difference per pixel
+  // Initialize or update ROI mask when dimensions change
+  const initROIMask = useCallback((width, height) => {
+    roiMaskRef.current = createROIMask(width, height);
   }, []);
 
-  const processFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+  const detectMotion = useCallback((currentFrame) => {
+    if (!currentFrame) return;
+
+    const { width, height, data: currentData } = currentFrame;
     
-    if (!video || !canvas || video.readyState !== 4) {
-      animationFrameRef.current = requestAnimationFrame(processFrame);
-      return;
+    // Initialize mask if needed
+    if (!roiMaskRef.current) {
+      initROIMask(width, height);
     }
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    
-    // Match canvas size to video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Draw current frame
-    ctx.drawImage(video, 0, 0);
-    
-    // Get current frame data
-    const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Skip first frame since we need two frames to compare
-    if (!previousImageDataRef.current) {
-      previousImageDataRef.current = currentImageData;
-      animationFrameRef.current = requestAnimationFrame(processFrame);
-      return;
-    }
-
+    // Skip if we're in cooldown period
     const now = Date.now();
-    const timeSinceLastDetection = now - lastDetectionRef.current;
+    if (now - lastDetectionRef.current < cooldownPeriod) {
+      return;
+    }
 
-    // Only process if we're outside the cooldown period
-    if (timeSinceLastDetection >= cooldownPeriod) {
-      const motionScore = detectMotion(
-        previousImageDataRef.current.data,
-        currentImageData.data
+    // Convert current frame to grayscale
+    const currentGrayscale = new Uint8Array(width * height);
+    for (let i = 0; i < currentData.length; i += 4) {
+      const idx = i / 4;
+      currentGrayscale[idx] = rgbToGrayscale(
+        currentData[i],
+        currentData[i + 1],
+        currentData[i + 2]
       );
+    }
 
-      if (motionScore > sensitivity) {
-        lastDetectionRef.current = now;
-        onMotionDetected();
+    // Skip if this is the first frame
+    if (!previousFrameRef.current) {
+      previousFrameRef.current = currentGrayscale;
+      return;
+    }
+
+    // Calculate difference between frames
+    let motionScore = 0;
+    let pixelsChecked = 0;
+
+    for (let i = 0; i < currentGrayscale.length; i++) {
+      // Only check pixels in ROI
+      if (roiMaskRef.current[i]) {
+        const diff = Math.abs(currentGrayscale[i] - previousFrameRef.current[i]);
+        if (diff > 20) { // Threshold for pixel-level change
+          motionScore += diff;
+        }
+        pixelsChecked++;
       }
     }
 
-    // Store current frame for next comparison
-    previousImageDataRef.current = currentImageData;
-    
-    // Continue the detection loop
-    animationFrameRef.current = requestAnimationFrame(processFrame);
-  }, [videoRef, canvasRef, onMotionDetected, sensitivity, cooldownPeriod, detectMotion]);
+    // Update previous frame
+    previousFrameRef.current = currentGrayscale;
 
-  const startDetection = useCallback(() => {
-    if (!animationFrameRef.current) {
-      processFrame();
+    // Calculate average motion and check if it exceeds threshold
+    const averageMotion = motionScore / pixelsChecked;
+    if (averageMotion > sensitivity) {
+      lastDetectionRef.current = now;
+      onMotionDetected();
     }
-  }, [processFrame]);
+  }, [sensitivity, cooldownPeriod, onMotionDetected, initROIMask]);
 
-  const stopDetection = useCallback(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    previousImageDataRef.current = null;
+  const resetDetection = useCallback(() => {
+    previousFrameRef.current = null;
     lastDetectionRef.current = 0;
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopDetection();
-    };
-  }, [stopDetection]);
-
   return {
-    startDetection,
-    stopDetection
+    detectMotion,
+    resetDetection,
+    isProcessing,
+    setIsProcessing
   };
 };
