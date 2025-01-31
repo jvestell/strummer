@@ -1,29 +1,56 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Counter } from './components/Counter/Counter';
 import { Metronome } from './components/Metronome/Metronome';
+import { playMilestoneAnnouncement, getAudioContext } from './utils/ttsUtils';
 
 const App = () => {
   const [strumCount, setStrumCount] = useState(0);
   const [bpm, setBpm] = useState(60);
   const [isActive, setIsActive] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [audioInitialized, setAudioInitialized] = useState(false);
+
+  // Initialize audio context on first user interaction
+  const initAudio = useCallback(async () => {
+    try {
+      const context = getAudioContext();
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+      setAudioInitialized(true);
+    } catch (error) {
+      console.error('Failed to initialize audio:', error);
+    }
+  }, []);
 
   // Handle metronome beats and strum counting
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !audioInitialized) return;
 
-    const interval = (60 / bpm) * 1000; // Convert BPM to milliseconds
+    const interval = (60 / bpm) * 1000;
     const beatInterval = setInterval(() => {
-      setStrumCount(prev => prev + 2); // Increment by 2 for up/down strums
+      setStrumCount(prev => {
+        const newCount = prev + 2;
+        // Check if we've hit a milestone
+        if (newCount % 20 === 0 && soundEnabled) {
+          playMilestoneAnnouncement(newCount).catch(error => {
+            console.error('Failed to play announcement:', error);
+          });
+        }
+        return newCount;
+      });
     }, interval);
 
     return () => clearInterval(beatInterval);
-  }, [isActive, bpm]);
+  }, [isActive, bpm, audioInitialized, soundEnabled]);
 
-  const handleStartStop = () => {
+  const handleStartStop = async () => {
+    if (!audioInitialized) {
+      await initAudio(); // Initialize audio on first interaction
+    }
     setIsActive(prev => !prev);
     if (!isActive) {
-      setStrumCount(0); // Reset counter when starting
+      setStrumCount(0);
     }
   };
 
