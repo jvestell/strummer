@@ -1,7 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import { createROIMask, rgbToGrayscale } from '../utils/motionDetection';
 
-export const useMotionDetection = ({ onMotionDetected, sensitivity = 30, cooldownPeriod = 500 }) => {
+export const useMotionDetection = ({ 
+  onMotionDetected, 
+  sensitivity = 25,         // Slightly lower sensitivity
+  cooldownPeriod = 300,    // Faster cooldown for rapid strums
+  minMotionDuration = 50   // New parameter for minimum motion duration
+}) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const previousFrameRef = useRef(null);
   const roiMaskRef = useRef(null);
@@ -49,26 +54,45 @@ export const useMotionDetection = ({ onMotionDetected, sensitivity = 30, cooldow
     let motionScore = 0;
     let pixelsChecked = 0;
 
+    // Add directional analysis
+    let verticalMotion = 0;
+    let horizontalMotion = 0;
+
     for (let i = 0; i < currentGrayscale.length; i++) {
-      // Only check pixels in ROI
       if (roiMaskRef.current[i]) {
         const diff = Math.abs(currentGrayscale[i] - previousFrameRef.current[i]);
-        if (diff > 20) { // Threshold for pixel-level change
+        if (diff > 20) {
+          const x = i % width;
+          const y = Math.floor(i / width);
+          
+          // Calculate directional components
+          if (i + 1 < currentGrayscale.length) {
+            horizontalMotion += Math.abs(currentGrayscale[i + 1] - currentGrayscale[i]);
+          }
+          if (i + width < currentGrayscale.length) {
+            verticalMotion += Math.abs(currentGrayscale[i + width] - currentGrayscale[i]);
+          }
+          
           motionScore += diff;
+          pixelsChecked++;
         }
-        pixelsChecked++;
+      }
+    }
+
+    // Check if motion matches strum pattern
+    const isStrumMotion = 
+      horizontalMotion > verticalMotion * 1.5 && // More horizontal than vertical motion
+      motionScore > sensitivity * pixelsChecked;
+
+    if (isStrumMotion) {
+      if (now - lastDetectionRef.current >= cooldownPeriod) {
+        lastDetectionRef.current = now;
+        onMotionDetected();
       }
     }
 
     // Update previous frame
     previousFrameRef.current = currentGrayscale;
-
-    // Calculate average motion and check if it exceeds threshold
-    const averageMotion = motionScore / pixelsChecked;
-    if (averageMotion > sensitivity) {
-      lastDetectionRef.current = now;
-      onMotionDetected();
-    }
   }, [sensitivity, cooldownPeriod, onMotionDetected, initROIMask]);
 
   const resetDetection = useCallback(() => {
